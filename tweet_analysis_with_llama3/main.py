@@ -1,5 +1,6 @@
 import json
 
+import chainlit as cl
 from langchain.prompts import PromptTemplate
 from langchain_community.llms.ollama import Ollama
 from langchain_core.language_models.llms import BaseLLM
@@ -15,8 +16,8 @@ def setup_prompt() -> PromptTemplate:
     return PromptTemplate.from_template(template=analysis_template)
 
 
-def parse_tweets():
-    with open("../tweet_histories/tweets.json") as f:
+def parse_tweets(file_path: str):
+    with open(file_path) as f:
         tweets = json.load(f)
 
     return [
@@ -26,16 +27,23 @@ def parse_tweets():
     ]
 
 
-def main():
+@cl.on_chat_start
+async def start():
     llm = setup_llm()
     template = setup_prompt()
-    chain = template | llm 
+    chain = template | llm
 
-    tweets = parse_tweets()
+    files = None
+    while files == None:
+        files = await cl.AskFileMessage(
+            content="ファイルをアップロード次第ツイートの内容を分析します。",
+            accept={"text/plain": [".json", ".js"]},
+            max_size_mb=200,
+        ).send()
 
-    response = chain.invoke({"tweets": "\n".join(tweets)})
-    print(response)
+    tweets = parse_tweets(files[0].path)
 
-
-if __name__ == "__main__":
-    main()
+    response = await chain.ainvoke(
+        "\n".join(tweets), callbacks=[cl.AsyncLangchainCallbackHandler()]
+    )
+    await cl.Message(content=response).send()

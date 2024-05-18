@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "tweet-analysis-with-llama3"
+version = "0.1.0"
+description = ""
+authors = ["ryogen <ryougen96@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+chainlit = "^1.1.101"
+langchain = "^0.2.0"
+langchain-community = "^0.2.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.4.2"
+flake8 = "^7.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

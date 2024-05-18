@@ -1,4 +1,5 @@
 import json
+import re
 
 import chainlit as cl
 from langchain.prompts import PromptTemplate
@@ -18,8 +19,11 @@ def setup_prompt() -> PromptTemplate:
 
 def parse_tweets(file_path: str):
     with open(file_path) as f:
-        tweets = json.load(f)
+        js_content = f.read()
 
+    json_string = re.findall(r"window\.YTD\.tweets\.part0 = (\[.*\])", js_content, re.DOTALL)[0]
+    tweets = json.loads(json_string)
+    
     return [
         f"{tweet['tweet']['edit_info']['initial']['editableUntil']}: {tweet['tweet']['full_text']}"
         for tweet in tweets
@@ -37,7 +41,7 @@ async def start():
     while files == None:
         files = await cl.AskFileMessage(
             content="ファイルをアップロード次第ツイートの内容を分析します。",
-            accept={"text/plain": [".json", ".js"]},
+            accept={"text/plain": [".js"]},
             max_size_mb=200,
         ).send()
 

@@ -1,20 +1,23 @@
 import json
+import os
 import re
+from pathlib import Path
 
 import chainlit as cl
 from langchain.prompts import PromptTemplate
 from langchain_community.llms.ollama import Ollama
 from langchain_core.language_models.llms import BaseLLM
 
-from tweet_analysis_with_llama3.template.analysis import analysis_template
-
 
 def setup_llm() -> BaseLLM:
     return Ollama(model="llama3")
 
 
-def setup_prompt() -> PromptTemplate:
-    return PromptTemplate.from_template(template=analysis_template)
+def setup_template(file_path: str) -> PromptTemplate:
+    with open(file_path, mode="r") as f:
+        template_str = f.readlines()
+    
+    return PromptTemplate.from_template(template="".join(template_str))
 
 
 def parse_tweets(file_path: str):
@@ -34,7 +37,7 @@ def parse_tweets(file_path: str):
 @cl.on_chat_start
 async def start():
     llm = setup_llm()
-    template = setup_prompt()
+    template =  setup_template(os.path.join(Path(__file__).parent, "template/analysis.txt"))
     chain = template | llm
 
     files = None

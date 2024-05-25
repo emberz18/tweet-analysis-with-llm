@@ -2,3 +2,6 @@
 **.pyc
 **.json
 .files
+
+chainlit.md
+config.toml

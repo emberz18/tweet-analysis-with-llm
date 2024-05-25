@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import re
@@ -10,6 +11,8 @@ from langchain_community.llms.ollama import Ollama
 from langchain_core.language_models.llms import BaseLLM
 from langchain_text_splitters import CharacterTextSplitter
 
+
+sem = asyncio.Semaphore(1)
 
 def setup_llm() -> BaseLLM:
     return Ollama(model="llama3")
@@ -35,6 +38,17 @@ def parse_tweets(file_path: str):
         if not "RT" in tweet["tweet"]["full_text"]
     ]
 
+async def generate_summarization(map_chain: RunnableSequence, splitted_tweet: str, step_name: str, message):
+    async with sem:
+        message.content = f"{step_name}を実施中です。"
+        await message.update()
+        response = map_chain.invoke({"docs": splitted_tweet})
+
+    async with cl.Step(name=step_name) as step:
+        step.output = response
+        await step.update()
+    return response
+
 @cl.on_chat_start
 async def start():
     llm = setup_llm()
@@ -55,7 +69,7 @@ async def start():
     await message.send()
 
     tweets = parse_tweets(files[0].path)
-    summarizations = tweets[:2000]
+    summarizations = tweets
 
     i = 1
     while True:
@@ -66,14 +80,12 @@ async def start():
         if len(splitted_summarization) == 1:
             break
 
-        message.content = f"要約の{i}回目を実施中です。"
-        await message.update()
-        summarizations = [map_chain.invoke({"docs": splitted_tweet}) for splitted_tweet in splitted_summarization]
-    
-        for j, summarization in enumerate(summarizations):
-            async with cl.Step(name=f"要約内容{i}_{j}") as step:
-                    step.output = summarization
-                    await step.update()
+        tasks = [
+            generate_summarization(map_chain, splitted_tweet, f"要約{i}_{j}", message) 
+            for j,splitted_tweet in enumerate(splitted_summarization)
+        ]
+        summarizations = await asyncio.gather(*tasks)
+
         i+=1
 
     message.content = reduce_chain.invoke({"docs": splitted_summarization[0]})

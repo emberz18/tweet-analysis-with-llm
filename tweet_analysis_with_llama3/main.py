@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 import chainlit as cl
@@ -33,10 +34,16 @@ def parse_tweets(file_path: str):
     tweets = json.loads(json_string)
     
     return [
-        f"{tweet['tweet']['edit_info']['initial']['editableUntil']}: {tweet['tweet']['full_text']}"
+        {
+            "created_at": to_datetime(tweet['tweet']['edit_info']['initial']['editableUntil']),
+            "content":f"{tweet['tweet']['edit_info']['initial']['editableUntil']}: {tweet['tweet']['full_text']}"
+        }
         for tweet in tweets
         if not "RT" in tweet["tweet"]["full_text"]
     ]
+
+def to_datetime(created_at: str):
+    return datetime.strptime(created_at.split(".")[0], "%Y-%m-%dT%H:%M:%S")
 
 async def generate_summarization(map_chain: RunnableSequence, splitted_tweet: str, step_name: str, message):
     async with sem:
@@ -69,7 +76,7 @@ async def start():
     await message.send()
 
     tweets = parse_tweets(files[0].path)
-    summarizations = tweets
+    summarizations = [tweet["content"] for tweet in filter(lambda t: t["created_at"].year > 2020, tweets)]
 
     i = 1
     while True:

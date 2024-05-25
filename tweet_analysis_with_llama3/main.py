@@ -4,9 +4,11 @@ import re
 from pathlib import Path
 
 import chainlit as cl
+from langchain_core.runnables.base import RunnableSequence
 from langchain.prompts import PromptTemplate
 from langchain_community.llms.ollama import Ollama
 from langchain_core.language_models.llms import BaseLLM
+from langchain_text_splitters import CharacterTextSplitter
 
 
 def setup_llm() -> BaseLLM:
@@ -33,12 +35,13 @@ def parse_tweets(file_path: str):
         if not "RT" in tweet["tweet"]["full_text"]
     ]
 
-
 @cl.on_chat_start
 async def start():
     llm = setup_llm()
     template =  setup_template(os.path.join(Path(__file__).parent, "template/analysis.txt"))
-    chain = template | llm
+    map_prompt = setup_template(os.path.join(Path(__file__).parent,"template/summarization.txt"))
+    map_chain = map_prompt | llm
+    reduce_chain = template | llm
 
     files = None
     while files == None:
@@ -48,9 +51,31 @@ async def start():
             max_size_mb=200,
         ).send()
 
-    tweets = parse_tweets(files[0].path)
+    message = cl.Message(content="")
+    await message.send()
 
-    response = await chain.ainvoke(
-        "\n".join(tweets), callbacks=[cl.AsyncLangchainCallbackHandler()]
-    )
-    await cl.Message(content=response).send()
+    tweets = parse_tweets(files[0].path)
+    summarizations = tweets[:2000]
+
+    i = 1
+    while True:
+        splitted_summarization = CharacterTextSplitter(
+            chunk_size=4000, chunk_overlap=0
+        ).split_text("\n".join(summarizations))
+
+        if len(splitted_summarization) == 1:
+            break
+
+        message.content = f"要約の{i}回目を実施中です。"
+        await message.update()
+        summarizations = [map_chain.invoke({"docs": splitted_tweet}) for splitted_tweet in splitted_summarization]
+    
+        for j, summarization in enumerate(summarizations):
+            async with cl.Step(name=f"要約内容{i}_{j}") as step:
+                    step.output = summarization
+                    await step.update()
+        i+=1
+
+    message.content = reduce_chain.invoke({"docs": splitted_summarization[0]})
+    await message.update()
+
